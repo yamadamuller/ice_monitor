@@ -98,16 +98,16 @@ def producer_main():
             where = file.tell() #monitor the file pointer
             line = file.readline() #read a line
 
-            #process the line
-            try:
-                line = line.strip().replace(' ', '') #strip spaces in the string
-                arr = np.array(line.split(',')) #split on commas
-                if not buffer.full():
-                    buffer.put(arr) #push to the buffer
-            except:
+            if not line:
                 file.seek(where)
                 time.sleep(1e-3)
                 continue
+
+            #process the line
+            line = line.strip().replace(' ', '') #strip spaces in the string
+            arr = np.array(line.split(',')) #split on commas
+            if not buffer.full():
+                buffer.put(arr) #push to the buffer
 
 #constantly consume samples from the buffer in memory
 def consumer_main(plot_buffer:multiprocessing.Queue):
