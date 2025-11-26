@@ -14,36 +14,25 @@ import csv
 import numpy as np
 from matplotlib.ticker import MaxNLocator
 
-def autoconstrast(x:np.ndarray, l=0, u=1):
-    ratio = (x-np.min(x))/(np.max(x)-np.min(x))
-    return l + ratio*(u-l)
-
-def signal_handler(sig, frame):
-
-    print("[SignalHandler] Interrupt received. Stopping recording...", flush=True)
-    stop_recording = True
-    plt.close('all') #close all images
-    sys.exit()
-
-signal.signal(signal.SIGINT, signal_handler)
-
-# --- ACQUISITION CONFIGS ------------------------------------------------------
-output_path = 'C:/Users/Everton/Desktop/PHOBOS_sw_test_Data/testtest'  # path to where the real acquisitions are stored |
-# directory_split = '/' #might be '\' in windows                                |
-filename = 'test_realtime.csv'  # file that stores the readings
-final_path = os.path.join(output_path, filename)#                       |
-# ------------------------------------------------------------------------------
+#--- ACQUISITION CONFIGS ------------------------------------------------------
+output_path = './acquisition' #path to where the real acquisitions are stored |
+filename = f'test_26_11_2025/c_test.csv' #file that stores the readings       |
+final_path = os.path.join(output_path, filename) #file that stores readings   |
+n_modes = 10  #number of acquisition pairs                                    |
+n_mean = 3  #every 3 samples compute the mean                                 |
+cap_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #frequencies                  |
+res_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #frequencies                  |
+#------------------------------------------------------------------------------
 
 # buffers in memory
 stop_recording = False
 buffer = multiprocessing.Queue()
 plots = multiprocessing.Queue()
 
-# array indexes
-idx_caps = np.arange(2, 10, 2)  # indexes of the capacitance
-idx_res = np.arange(3, 10, 2)  # indexes of the resistance
-n_modes = 10  # number of acquisition pairs
-n_mean = 1  # every 3 samples compute the mean
+#array indexes
+n_freqs = len(cap_freqs)
+idx_caps = np.arange(2, int(2*n_freqs+2), 2) #indexes of the capacitance
+idx_res = np.arange(3, int(2*n_freqs+2), 2) #indexes of the resistance
 
 # plotting helpers
 capacitance_full = []
@@ -54,6 +43,19 @@ mode_order = [
     "d:6-7", "d:7-8", "d:8-9", "d:9-10", "d:10-1"
 ]
 mode_index = {p: i for i, p in enumerate(mode_order)}
+
+def autoconstrast(x:np.ndarray, l=0, u=1):
+    ratio = (x-np.min(x))/(np.max(x)-np.min(x))
+    return l + ratio*(u-l)
+
+def signal_handler(sig, frame):
+    global stop_recording
+    print("[SignalHandler] Interrupt received. Stopping recording...", flush=True)
+    stop_recording = True
+    plt.close('all') #close all images
+    sys.exit()
+
+signal.signal(signal.SIGINT, signal_handler)
 
 #constantly read from the buffer CSV and push to the sample buffer in memory
 def producer_main(buffer:multiprocessing.Queue):
@@ -117,17 +119,16 @@ def consumer_main(plot_buffer:multiprocessing.Queue, buffer:multiprocessing.Queu
             time.sleep(1e-3)
 
 def init_plot(mode_order:list[str]):
-    #monitored frequencies
-    cap_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"]
-    res_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"]
+    global cap_freqs, res_freqs
 
+    #monitored frequencies
     plt.ion()
     fig, axes = plt.subplots(2, 4, figsize=(10,5))
 
     cap_ims = []
     res_ims = []
 
-    for f in range(4):
+    for f in range(len(cap_freqs)):
         ax = axes[0, f]
         im = ax.imshow(np.zeros((len(mode_order), 1)),
                        aspect='auto', cmap='jet')
@@ -145,7 +146,7 @@ def init_plot(mode_order:list[str]):
         fig.colorbar(im, ax=ax)
         cap_ims.append(im)
 
-    for f in range(4):
+    for f in range(len(cap_freqs)):
         ax = axes[1, f]
         im = ax.imshow(np.zeros((len(mode_order), 1)),
                        aspect='auto', cmap='jet')
@@ -181,6 +182,9 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
         ax = im.axes
         ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+        fig = cap_ims[f].axes.figure
+        fig.canvas.draw()
+        fig.canvas.flush_events()
 
     for f, im in enumerate(res_ims):
         data = res_matrix[:, :, f].T #transpose the array to have modes on the Y-axis
@@ -192,6 +196,9 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
         ax = im.axes
         ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+        fig = res_ims[f].axes.figure
+        fig.canvas.draw()
+        fig.canvas.flush_events()
 
     plt.pause(0.1) #plotly refresh
 
@@ -235,7 +242,7 @@ if __name__ == '__main__':
                 if img_counter == len(mode_index):
                     capacitance_full.append(cap) #append the capacitance
                     resistance_full.append(res) #append the resistances
-                    print(f'[{time.time()-t_last_frame}] frame generated = {np.shape(capacitance_full)}', flush=True)
+                    print(f'[{time.time()-t_last_frame}] frame generated', flush=True)
                     time_frame = frame["avg_timestamp"] #avg. timestamp of the last 3 readings
                     time_history.append(time_frame) #append only the timestamp of the last mode
                     cap_matrix = np.stack(capacitance_full, axis=0) #stack the values
