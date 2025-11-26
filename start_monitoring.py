@@ -1,6 +1,5 @@
 from multiprocessing import Process
 import multiprocessing
-import multiprocessing
 import sys
 import signal
 import time
@@ -28,14 +27,11 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-#output path configuration
-output_path = './acquisition'
-datestamp = datetime.datetime.now()
-specific_path = f'test_{datestamp.day}_{datestamp.month}_{datestamp.year}'
-acquisition_path = os.path.join(output_path, specific_path)
-filename = 'c_test.csv'
-final_path = os.path.join(acquisition_path, filename)
-os.makedirs(os.path.dirname(final_path), exist_ok=True) if os.path.dirname(final_path) else None
+#--- ACQUISITION CONFIGS ------------------------------------------------------
+output_path = './acquisition' #path to where the real acquisitions are stored |
+directory_split = '/' #might be '\' in windows                                |
+filename = 'c_test.csv' #file that stores the readings                        |
+#------------------------------------------------------------------------------
 
 #buffers in memory
 stop_recording = False
@@ -60,17 +56,23 @@ mode_index = {p: i for i, p in enumerate(mode_order)}
 
 #write the content of the original CSV to the buffer CSV
 def writter_main():
-    global final_path
+    global output_path, filename
+
     print(f'[WritterMain] Launched writting process')
     columns = ["timestamp", "mode", "1000 Z", "1000 TD", "10000 Z", "10000 TD", "100000 Z", "100000 TD", "1000000 Z",
                "1000000 TD"]
 
     #synthetic data
-    filename = "./testICE_24_11_25/c_test.csv"
-    data = pd.read_csv(filename).to_numpy()
+    synthfile = "./testICE_24_11_25/c_test.csv"
+    data = pd.read_csv(synthfile).to_numpy()
     data_idx = 0
+    datestamp = datetime.datetime.now() #timestamp of the acquisition
+    acq_subdir = f'test_{datestamp.day}_{datestamp.month}_{datestamp.year}' #subdirectory based on timestamp
+    acq_path = os.path.join(output_path, acq_subdir) #relative path to the subdirectory
+    rel_acq_file = os.path.join(acq_path, filename) #relative path to the readings file
+    os.makedirs(os.path.dirname(rel_acq_file), exist_ok=True) if os.path.dirname(rel_acq_file) else None #create file if it doesn't exist
 
-    with open(final_path, 'a', buffering=1) as file:
+    with open(rel_acq_file, 'a', buffering=1) as file:
         writer = csv.writer(file)
         writer.writerow(columns)
         while True:
@@ -100,7 +102,7 @@ def producer_main():
 
             if not line:
                 file.seek(where)
-                time.sleep(1e-3)
+                time.sleep(1)
                 continue
 
             #process the line
@@ -149,7 +151,7 @@ def consumer_main(plot_buffer:multiprocessing.Queue):
             except:
                 continue #if something fails during the registering
         else:
-            time.sleep(1e-3)
+            time.sleep(0.1)
 
 def init_plot(mode_order:list[str]):
     #monitored frequencies
@@ -166,11 +168,17 @@ def init_plot(mode_order:list[str]):
         ax = axes[0, f]
         im = ax.imshow(np.zeros((len(mode_order), 1)),
                        aspect='auto', cmap='jet')
-        ax.set_title(f"Cap. norm. - {cap_freqs[f]}")
+        ax.set_title(f"Cap. norm. @ {cap_freqs[f]}")
         ax.set_xlabel("Time")
-        ax.set_ylabel("Mode")
-        ax.set_yticks(range(len(mode_order)))
-        ax.set_yticklabels(mode_order)
+
+        #set y label only for the first image
+        if f == 0:
+            ax.set_ylabel("Mode")
+            ax.set_yticks(range(len(mode_order)))
+            ax.set_yticklabels(mode_order)
+        else:
+            ax.set_yticks([]) #hide the y label in other plots
+
         fig.colorbar(im, ax=ax)
         cap_ims.append(im)
 
@@ -178,11 +186,17 @@ def init_plot(mode_order:list[str]):
         ax = axes[1, f]
         im = ax.imshow(np.zeros((len(mode_order), 1)),
                        aspect='auto', cmap='jet')
-        ax.set_title(f"Res. norm. - {res_freqs[f]}")
-        ax.set_xlabel("Time (frames)")
-        ax.set_ylabel("Mode")
-        ax.set_yticks(range(len(mode_order)))
-        ax.set_yticklabels(mode_order)
+        ax.set_title(f"Res. norm. @ {res_freqs[f]}")
+        ax.set_xlabel("Time")
+
+        #set y labels only for the first image
+        if f == 0:
+            ax.set_ylabel("Mode")
+            ax.set_yticks(range(len(mode_order)))
+            ax.set_yticklabels(mode_order)
+        else:
+            ax.set_yticks([]) #hide the y label in other plots
+
         fig.colorbar(im, ax=ax)
         res_ims.append(im)
 
@@ -203,7 +217,7 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
         im.set_clim(0, 1)
         ax = im.axes
         ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d-%m %H:%M:%S"))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
     for f, im in enumerate(res_ims):
         data = res_matrix[:, :, f].T #transpose the array to have modes on the Y-axis
@@ -214,14 +228,36 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
         im.set_clim(0, 1)
         ax = im.axes
         ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d-%m %H:%M:%S"))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
     plt.pause(0.01) #plotly refresh
 
 #launch the three processes
 write_proc = Process(target=writter_main)
 write_proc.start()
-time.sleep(0.5) #wait 0.5 seconds to ensure the file exists
+
+#find the most recent "c_test.csv" file
+curr_date = datetime.datetime.now() #current timestamp
+while True:
+    all_output_subdirs = [os.path.join(output_path, d) for d in os.listdir(output_path) if os.path.isdir(os.path.join(output_path, d))] #list existing sub-directories
+
+    if all_output_subdirs:
+        specific_path = max(all_output_subdirs, key=os.path.getmtime) #find the most recent directory
+        specific_path_split = specific_path.split(f'{directory_split}')[-1] #return only the subdirectory name
+
+        #check if the found subdirectory matches the date
+        if specific_path_split == f'test_{curr_date.day}_{curr_date.month}_{curr_date.year}':
+            break
+
+    time.sleep(1e-3) #busy wait
+
+final_path = os.path.join(specific_path, filename) #relative path to the readings file
+print(f'[StartMonitoring] Monitoring CSV file @ {final_path}')
+
+#busy wait while target filepath doesn't exist
+while not os.path.isfile(final_path):
+    time.sleep(1e-3)
+
 producer_proc = Process(target=producer_main)
 producer_proc.start()
 consumer_proc = Process(target=consumer_main, args=(plots,))
@@ -243,15 +279,15 @@ while not stop_recording:
             idx_frame = mode_index[frame["mode"]] #mode-specific index
             cap_frame = frame["avg_cap"] #avg. capacitance of the last 3 readings
             res_frame = frame["avg_res"] #avg. resistance of the last 3 readings
-            time_frame = frame["avg_timestamp"] #avg. timestamp of the last 3 readings
             cap[idx_frame,:] = cap_frame #register the mode-specific readings at the cap array
             res[idx_frame,:] = res_frame #register the mode-specific readings at the res array
 
-            #once all samples ina batch for all modes are processed
+            #once all samples in a batch for all modes are processed
             if img_counter == len(mode_index):
-                capacitance_full.append(cap) #append the capacitances
+                capacitance_full.append(cap) #append the capacitance
                 resistance_full.append(res) #append the resistances
-                time_history.append(time_frame) #append the timestamps
+                time_frame = frame["avg_timestamp"] #avg. timestamp of the last 3 readings
+                time_history.append(time_frame) #append only the timestamp of the last mode
                 cap_matrix = np.stack(capacitance_full, axis=0) #stack the values
                 res_matrix = np.stack(resistance_full, axis=0) #stack the values
                 update_plot(cap_matrix, res_matrix, cap_ims, res_ims, time_history) #update images with the newly stacked matrices
