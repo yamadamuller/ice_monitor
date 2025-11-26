@@ -15,8 +15,9 @@ import numpy as np
 from matplotlib.ticker import MaxNLocator
 
 #--- ACQUISITION CONFIGS ------------------------------------------------------
-output_path = './acquisition' #path to where the real acquisitions are stored |
-filename = f'test_26_11_2025/c_test.csv' #file that stores the readings       |
+#path to where the real acquisitions are stored                               |
+output_path = 'C:/Users/Everton/Desktop/PHOBOS_sw_test_Data/testtest'#        |
+filename = f'test_realtime.csv' #file that stores the readings                |
 final_path = os.path.join(output_path, filename) #file that stores readings   |
 n_modes = 10  #number of acquisition pairs                                    |
 n_mean = 3  #every 3 samples compute the mean                                 |
@@ -200,7 +201,7 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
         fig.canvas.draw()
         fig.canvas.flush_events()
 
-    plt.pause(0.1) #plotly refresh
+    #plt.pause(0.01) #plotly refresh
 
 
 #launch the three processes
