@@ -19,7 +19,7 @@ def autoconstrast(x:np.ndarray, l=0, u=1):
     return l + ratio*(u-l)
 
 def signal_handler(sig, frame):
-
+    global stop_recording
     print("[SignalHandler] Interrupt received. Stopping recording...", flush=True)
     stop_recording = True
     plt.close('all') #close all images
@@ -27,25 +27,27 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-# --- ACQUISITION CONFIGS ------------------------------------------------------
-output_path = 'C:/Users/Everton/Desktop/PHOBOS_sw_test_Data/testtest'  # path to where the real acquisitions are stored |
-# directory_split = '/' #might be '\' in windows                                |
-filename = 'test_realtime.csv'  # file that stores the readings
-final_path = os.path.join(output_path, filename)#                       |
-# ------------------------------------------------------------------------------
+#--- ACQUISITION CONFIGS ------------------------------------------------------
+output_path = './acquisition' #path to where the real acquisitions are stored |
+directory_split = '/' #might be '\' in windows                                |
+filename = 'c_test.csv' #file that stores the readings                        |
+n_modes = 10  #number of acquisition pairs                                    |
+n_mean = 3  #every 3 samples compute the mean                                 |
+cap_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #frequencies                  |
+res_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #frequencies                  |
+#------------------------------------------------------------------------------
 
-# buffers in memory
+#buffers in memory
 stop_recording = False
 buffer = multiprocessing.Queue()
 plots = multiprocessing.Queue()
 
-# array indexes
-idx_caps = np.arange(2, 10, 2)  # indexes of the capacitance
-idx_res = np.arange(3, 10, 2)  # indexes of the resistance
-n_modes = 10  # number of acquisition pairs
-n_mean = 1  # every 3 samples compute the mean
+#array indexes
+n_freqs = len(cap_freqs)
+idx_caps = np.arange(2, int(2*n_freqs+2), 2) #indexes of the capacitance
+idx_res = np.arange(3, int(2*n_freqs+2), 2) #indexes of the resistance
 
-# plotting helpers
+#plotting helpers
 capacitance_full = []
 resistance_full = []
 time_history = []
@@ -54,6 +56,39 @@ mode_order = [
     "d:6-7", "d:7-8", "d:8-9", "d:9-10", "d:10-1"
 ]
 mode_index = {p: i for i, p in enumerate(mode_order)}
+
+def writter_main():
+    print(f'[WritterMain] Launched writting process')
+    columns = ["timestamp", "mode", "1000 Z", "1000 TD", "10000 Z", "10000 TD", "100000 Z", "100000 TD", "1000000 Z", "1000000 TD"]
+
+    #synthetic data
+    synth_filename = "./testICE_24_11_25/c_test.csv"
+    data = pd.read_csv(synth_filename).to_numpy()
+    data_idx = 0
+    datestamp = datetime.datetime.now()  # timestamp of the acquisition
+    acq_subdir = f'test_{datestamp.day}_{datestamp.month}_{datestamp.year}' #subdirectory based on timestamp
+    acq_path = os.path.join(output_path, acq_subdir) #relative path to the subdirectory
+    rel_acq_file = os.path.join(acq_path, filename) #relative path to the readings file
+    os.makedirs(os.path.dirname(rel_acq_file), exist_ok=True) if os.path.dirname(rel_acq_file) else None #create file if it doesn't exist
+
+    with open(rel_acq_file, 'a', buffering=1) as file:
+        writer = csv.writer(file)
+        writer.writerow(columns)
+        while True:
+            row = (
+                data[data_idx, 0], data[data_idx, 1], data[data_idx, 2], data[data_idx, 3],
+                data[data_idx, 4], data[data_idx, 5], data[data_idx, 6], data[data_idx, 7],
+                data[data_idx, 8], data[data_idx, 9]
+            )
+
+            writer.writerow(row)
+            file.flush()
+            os.fsync(file.fileno())
+            time.sleep(11)
+            data_idx += 1  # increase the times
+
+            if data_idx == len(data):
+                break
 
 #constantly read from the buffer CSV and push to the sample buffer in memory
 def producer_main(buffer:multiprocessing.Queue):
@@ -117,17 +152,16 @@ def consumer_main(plot_buffer:multiprocessing.Queue, buffer:multiprocessing.Queu
             time.sleep(1e-3)
 
 def init_plot(mode_order:list[str]):
-    #monitored frequencies
-    cap_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"]
-    res_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"]
+    global cap_freqs, res_freqs
 
+    #monitored frequencies
     plt.ion()
     fig, axes = plt.subplots(2, 4, figsize=(10,5))
 
     cap_ims = []
     res_ims = []
 
-    for f in range(4):
+    for f in range(len(cap_freqs)):
         ax = axes[0, f]
         im = ax.imshow(np.zeros((len(mode_order), 1)),
                        aspect='auto', cmap='jet')
@@ -145,7 +179,7 @@ def init_plot(mode_order:list[str]):
         fig.colorbar(im, ax=ax)
         cap_ims.append(im)
 
-    for f in range(4):
+    for f in range(len(res_freqs)):
         ax = axes[1, f]
         im = ax.imshow(np.zeros((len(mode_order), 1)),
                        aspect='auto', cmap='jet')
@@ -181,6 +215,9 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
         ax = im.axes
         ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+        fig = cap_ims[f].axes.figure
+        fig.canvas.draw()
+        fig.canvas.flush_events()
 
     for f, im in enumerate(res_ims):
         data = res_matrix[:, :, f].T #transpose the array to have modes on the Y-axis
@@ -192,18 +229,32 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
         ax = im.axes
         ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-
-    plt.pause(0.1) #plotly refresh
-
+        fig = res_ims[f].axes.figure
+        fig.canvas.draw()
+        fig.canvas.flush_events()
 
 #launch the three processes
 if __name__ == '__main__':
+    write_proc = Process(target=writter_main)
+    write_proc.start()
+    time.sleep(0.5) #wait 0.5 seconds to ensure the file exists
+
     #find the most recent "c_test.csv" file
+    curr_date = datetime.datetime.now()  # current timestamp
+
     while True:
-        if os.path.isfile(final_path):
-            break
+        all_output_subdirs = [os.path.join(output_path, d) for d in os.listdir(output_path) if os.path.isdir(os.path.join(output_path, d))] #list existing sub-directories
+        if all_output_subdirs:
+            specific_path = max(all_output_subdirs, key=os.path.getmtime) #find the most recent directory
+            specific_path_split = specific_path.split(f'{directory_split}')[-1] #return only the subdirectory name
+
+            #check if the found subdirectory matches the date
+            if specific_path_split == f'test_{curr_date.day}_{curr_date.month}_{curr_date.year}':
+                break
+
         time.sleep(1e-3) #busy wait
 
+    final_path = os.path.join(specific_path, filename) #relative path to the readings file
     print(f'[StartMonitoring] Monitoring CSV file @ {final_path}')
 
     #busy wait while target filepath doesn't exist
@@ -217,8 +268,8 @@ if __name__ == '__main__':
 
     fig, axes, cap_ims, res_ims = init_plot(mode_order) #create the image object that will be overwritten every new sample
     img_counter = 0 #counter to monitor batches
-    cap = np.zeros((len(mode_index), 4)) #batch-specific capacitance array
-    res = np.zeros((len(mode_index), 4)) #batch-specific resistance array
+    cap = np.zeros((len(mode_index), len(cap_freqs))) #batch-specific capacitance array
+    res = np.zeros((len(mode_index), len(res_freqs))) #batch-specific resistance array
     t_last_frame = time.time() #variable to monitor the time it takes to generate a new frame
     while not stop_recording:
         if not plots.empty():
@@ -232,23 +283,30 @@ if __name__ == '__main__':
                 res[idx_frame,:] = res_frame #register the mode-specific readings at the res array
 
                 #once all samples in a batch for all modes are processed
-                if img_counter == len(mode_index):
+                if img_counter == n_modes:
                     capacitance_full.append(cap) #append the capacitance
                     resistance_full.append(res) #append the resistances
-                    print(f'[{time.time()-t_last_frame}] frame generated = {np.shape(capacitance_full)}', flush=True)
                     time_frame = frame["avg_timestamp"] #avg. timestamp of the last 3 readings
                     time_history.append(time_frame) #append only the timestamp of the last mode
                     cap_matrix = np.stack(capacitance_full, axis=0) #stack the values
                     res_matrix = np.stack(resistance_full, axis=0) #stack the values
                     update_plot(cap_matrix, res_matrix, cap_ims, res_ims, time_history) #update images with the newly stacked matrices
                     img_counter = 0 #reset the counter
-                    cap = np.zeros((len(mode_index), 4)) #reset the batch-specific capacitance array
-                    res = np.zeros((len(mode_index), 4)) #reset the batch-specific resistance array
+                    cap = np.zeros((len(mode_index), len(cap_freqs))) #reset the batch-specific capacitance array
+                    res = np.zeros((len(mode_index), len(res_freqs))) #reset the batch-specific resistance array
                     t_last_frame = time.time()
             except:
                 continue #in case something goes wrong in the processing
         else:
             continue #empty buffer
+
+    #if exited the recording loop, terminate all processes
+    if write_proc and write_proc.is_alive():
+        print(f'[StartMonitoring] Terminating CSV writing process with PID = {write_proc.pid}')
+        write_proc.terminate()
+        write_proc.join()
+        if not write_proc.is_alive():
+            print(f'[StartMonitoring] Process {write_proc.pid} terminated!')
 
     #if exited the recording loop, terminate all processes
     if producer_proc and producer_proc.is_alive():
