@@ -20,7 +20,7 @@ output_path = 'C:/Users/Everton/Desktop/PHOBOS_sw_test_Data/testtest'#        |
 filename = f'test_realtime.csv' #file that stores the readings                |
 final_path = os.path.join(output_path, filename) #file that stores readings   |
 n_modes = 10  #number of acquisition pairs                                    |
-n_mean = 3  #every 3 samples compute the mean                                 |
+n_mean = 1  #every 3 samples compute the mean                                 |
 cap_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #frequencies                  |
 res_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #frequencies                  |
 #------------------------------------------------------------------------------
@@ -40,8 +40,8 @@ capacitance_full = []
 resistance_full = []
 time_history = []
 mode_order = [
-    "d:1-2", "d:2-3", "d:3-4", "d:4-5", "d:5-6",
-    "d:6-7", "d:7-8", "d:8-9", "d:9-10", "d:10-1"
+    "d:10-1", "d:9-10", "d:8-9", "d:7-8", "d:6-7",
+    "d:5-6", "d:4-5", "d:3-4", "d:2-3", "d:1-2"
 ]
 mode_index = {p: i for i, p in enumerate(mode_order)}
 
@@ -124,13 +124,17 @@ def init_plot(mode_order:list[str]):
 
     #monitored frequencies
     plt.ion()
-    fig, axes = plt.subplots(2, 4, figsize=(10,5))
-
+    fig, axes = plt.subplots(2, len(cap_freqs), figsize=(10,5))
+    print(axes)
     cap_ims = []
     res_ims = []
 
     for f in range(len(cap_freqs)):
-        ax = axes[0, f]
+        if len(cap_freqs) == 1:
+            ax = axes[0]
+        else:
+            ax = axes[0, f]
+
         im = ax.imshow(np.zeros((len(mode_order), 1)),
                        aspect='auto', cmap='jet')
         ax.set_title(f"Cap. norm. @ {cap_freqs[f]}")
@@ -148,7 +152,11 @@ def init_plot(mode_order:list[str]):
         cap_ims.append(im)
 
     for f in range(len(cap_freqs)):
-        ax = axes[1, f]
+        if len(cap_freqs) == 1:
+            ax = axes[1]
+        else:
+            ax = axes[1, f]
+
         im = ax.imshow(np.zeros((len(mode_order), 1)),
                        aspect='auto', cmap='jet')
         ax.set_title(f"Res. norm. @ {res_freqs[f]}")
@@ -183,9 +191,9 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
         ax = im.axes
         ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-        fig = cap_ims[f].axes.figure
-        fig.canvas.draw()
-        fig.canvas.flush_events()
+        #fig = cap_ims[f].axes.figure
+        #fig.canvas.draw()
+        #fig.canvas.flush_events()
 
     for f, im in enumerate(res_ims):
         data = res_matrix[:, :, f].T #transpose the array to have modes on the Y-axis
@@ -197,12 +205,14 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
         ax = im.axes
         ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-        fig = res_ims[f].axes.figure
-        fig.canvas.draw()
-        fig.canvas.flush_events()
+        #fig = res_ims[f].axes.figure
+        #fig.canvas.draw()
+        #fig.canvas.flush_events()
 
-    #plt.pause(0.01) #plotly refresh
-
+    fig = cap_ims[0].axes.figure
+    fig.canvas.draw()
+    fig.canvas.flush_events()
+    plt.pause(0.01) #plotly refresh
 
 #launch the three processes
 if __name__ == '__main__':
@@ -243,7 +253,6 @@ if __name__ == '__main__':
                 if img_counter == len(mode_index):
                     capacitance_full.append(cap) #append the capacitance
                     resistance_full.append(res) #append the resistances
-                    print(f'[{time.time()-t_last_frame}] frame generated', flush=True)
                     time_frame = frame["avg_timestamp"] #avg. timestamp of the last 3 readings
                     time_history.append(time_frame) #append only the timestamp of the last mode
                     cap_matrix = np.stack(capacitance_full, axis=0) #stack the values
