@@ -14,11 +14,11 @@ from matplotlib.ticker import MaxNLocator
 
 #--- ACQUISITION CONFIGS ------------------------------------------------------
 #path to where the real acquisitions are stored                               |
-output_path = 'C:/Users/Everton/Desktop/PHOBOS_sw_test_Data/testtest'#        |
-filename = f'test_realtime.csv' #file that stores the readings                |
+output_path = 'C:/Users/Everton/Desktop/PHOBOS_sw_test_Data/test1'#        |
+filename = f'c_test.csv' #file that stores the readings                |
 final_path = os.path.join(output_path, filename) #file that stores readings   |
 n_modes = 10  #number of acquisition pairs                                    |
-n_mean = 1  #every n samples compute the mean                                 |
+n_mean = 3  #every n samples compute the mean                                 |
 cap_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #sweeped frequencies          |
 res_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #sweeped frequencies          |
 last_n_hours = 1 #threshold to mask timestamps on plot                        |
@@ -212,10 +212,6 @@ if __name__ == '__main__':
 
     print(f'[StartMonitoring] Monitoring CSV file @ {final_path}')
 
-    #busy wait while target filepath doesn't exist
-    #while not os.path.isfile(final_path):
-    #    time.sleep(0.1)
-
     producer_proc = Process(target=producer_main, args=(buffer,))
     producer_proc.start()
     consumer_proc = Process(target=consumer_main, args=(plots, buffer,))
@@ -225,7 +221,7 @@ if __name__ == '__main__':
     img_counter = 0 #counter to monitor batches
     cap = np.zeros((len(mode_index), 4)) #batch-specific capacitance array
     res = np.zeros((len(mode_index), 4)) #batch-specific resistance array
-    t_last_frame = time.time() #variable to monitor the time it takes to generate a new frame
+    #t_last_frame = time.time() #variable to monitor the time it takes to generate a new frame
     while not stop_recording:
         if not plots.empty():
             try:
@@ -243,22 +239,26 @@ if __name__ == '__main__':
                     resistance_full.append(res) #append the resistances
                     time_frame = frame["avg_timestamp"] #avg. timestamp of the last 3 readings
                     time_history.append(time_frame) #append only the timestamp of the last mode
-                    cap_matrix = np.stack(capacitance_full, axis=0) #stack the values
-                    res_matrix = np.stack(resistance_full, axis=0) #stack the values
 
                     #mask the arrays to window the signals on time
                     human_timestamp = [datetime.datetime.fromtimestamp(ts / 1e3) for ts in time_history] #list of the timestamps in human timestamp
                     human_timestamp = np.array(human_timestamp) #convert to array for better masking
                     time_mask = human_timestamp >= human_timestamp[-1] - datetime.timedelta(hours=last_n_hours) #timestamp mask (last "n" hours)
-                    cap_matrix = cap_matrix[time_mask, :, :] #mask the capacitance array
-                    res_matrix = res_matrix[time_mask, :, :] #mask the resistance array
 
+                    #TODO: optimize the masking
+                    capacitance_full = np.array(capacitance_full)[time_mask,:,:] #mask the total capacitance matrix
+                    capacitance_full = list(capacitance_full) #convert to list
+                    resistance_full = np.array(resistance_full)[time_mask,:,:] #mask to the total resistance matrix
+                    resistance_full = list(resistance_full) #convert to list
+                    cap_matrix = np.stack(capacitance_full, axis=0) #stack the values
+                    res_matrix = np.stack(resistance_full, axis=0) #stack the values
+
+                    #update the plot
                     update_plot(cap_matrix, res_matrix, cap_ims, res_ims, human_timestamp[time_mask], fig) #update images with the newly stacked matrices
-                    #print(f'[{time.time() - t_last_frame} s] Updated frame', flush=True)
                     img_counter = 0 #reset the counter
                     cap = np.zeros((len(mode_index), 4)) #reset the batch-specific capacitance array
                     res = np.zeros((len(mode_index), 4)) #reset the batch-specific resistance array
-                    t_last_frame = time.time()
+                    #t_last_frame = time.time() #update the last frame counter
             except:
                 continue #in case something goes wrong in the processing
         else:
