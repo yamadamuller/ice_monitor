@@ -246,6 +246,8 @@ if __name__ == '__main__':
                     time_mask = human_timestamp >= human_timestamp[-1] - datetime.timedelta(hours=last_n_hours) #timestamp mask (last "n" hours)
 
                     #TODO: optimize the masking
+                    time_history = np.array(time_history)[time_mask] #mask the timestamps
+                    time_history = list(time_history)
                     capacitance_full = np.array(capacitance_full)[time_mask,:,:] #mask the total capacitance matrix
                     capacitance_full = list(capacitance_full) #convert to list
                     resistance_full = np.array(resistance_full)[time_mask,:,:] #mask to the total resistance matrix
@@ -254,7 +256,7 @@ if __name__ == '__main__':
                     res_matrix = np.stack(resistance_full, axis=0) #stack the values
 
                     #update the plot
-                    update_plot(cap_matrix, res_matrix, cap_ims, res_ims, human_timestamp[time_mask], fig) #update images with the newly stacked matrices
+                    update_plot(cap_matrix, res_matrix, cap_ims, res_ims, human_timestamp, fig) #update images with the newly stacked matrices
                     img_counter = 0 #reset the counter
                     cap = np.zeros((len(mode_index), 4)) #reset the batch-specific capacitance array
                     res = np.zeros((len(mode_index), 4)) #reset the batch-specific resistance array
