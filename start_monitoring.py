@@ -13,6 +13,7 @@ import pandas as pd
 import csv
 import numpy as np
 from matplotlib.ticker import MaxNLocator
+from scipy.ndimage import median_filter, gaussian_filter
 
 def autoconstrast(x:np.ndarray, l=0, u=1):
     ratio = (x-np.min(x))/(np.max(x)-np.min(x))
@@ -28,14 +29,15 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 #--- ACQUISITION CONFIGS ------------------------------------------------------
-output_path = 'C:/Users/user/Documents/ice_monitor' #path to where the real acquisitions are stored |
-directory_split = '\\' #might be '\' in windows                                |
+output_path = './acquisition' #path to where the real acquisitions are stored |
+directory_split = '/' #might be '\' in windows                                |
 filename = 'c_test.csv' #file that stores the readings                        |
 n_modes = 10  #number of acquisition pairs                                    |
 n_mean = 3  #every 3 samples compute the mean                                 |
 cap_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #frequencies                  |
 res_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #frequencies                  |
-hours_mask = 0.5
+last_n_hours = 36
+filter_kernel = 5
 #------------------------------------------------------------------------------
 
 #buffers in memory
@@ -53,8 +55,8 @@ capacitance_full = []
 resistance_full = []
 time_history = []
 mode_order = [
-    "d:1-2", "d:2-3", "d:3-4", "d:4-5", "d:5-6",
-    "d:6-7", "d:7-8", "d:8-9", "d:9-10", "d:10-1"
+    "d:10-1", "d:9-10", "d:8-9", "d:7-8", "d:6-7",
+    "d:5-6", "d:4-5", "d:3-4", "d:2-3", "d:1-2"
 ]
 mode_index = {p: i for i, p in enumerate(mode_order)}
 
@@ -63,7 +65,7 @@ def writter_main():
     columns = ["timestamp", "mode", "1000 Z", "1000 TD", "10000 Z", "10000 TD", "100000 Z", "100000 TD", "1000000 Z", "1000000 TD"]
 
     #synthetic data
-    synth_filename = "C:/Users/user/Documents/ice_monitor/testICE_24_11_25/c_test.csv"
+    synth_filename = "./testICE_25_11_25/c_test.csv"
     data = pd.read_csv(synth_filename).to_numpy()
     data_idx = 0
     datestamp = datetime.datetime.now()  # timestamp of the acquisition
@@ -85,7 +87,7 @@ def writter_main():
             writer.writerow(row)
             file.flush()
             os.fsync(file.fileno())
-            #time.sleep(0.25)
+            time.sleep(0.32)
             data_idx += 1  # increase the times
 
             if data_idx == len(data):
@@ -184,7 +186,7 @@ def init_plot(mode_order:list[str]):
         ax = axes[1, f]
         im = ax.imshow(np.zeros((len(mode_order), 1)),
                        aspect='auto', cmap='jet')
-        ax.set_title(f"Res. norm. @ {res_freqs[f]}")
+        ax.set_title(f"Cap. norm. w/ median filter @ {res_freqs[f]}")
         ax.set_xlabel("Time")
 
         #set y labels only for the first image
@@ -209,6 +211,7 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
     for f, im in enumerate(cap_ims):
         data = cap_matrix[:, :, f].T #transpose the array to have modes on the Y-axis
         data = autoconstrast(data) #normalize the image
+
         im.set_data(data) #update the capacitance data
         im.set_extent([time_array[0], time_array[-1], 0, data.shape[0]]) #map x-axis to timestamps
         im.axes.set_xlim(time_array[0], time_array[-1])
@@ -219,7 +222,9 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
 
     for f, im in enumerate(res_ims):
         data = res_matrix[:, :, f].T #transpose the array to have modes on the Y-axis
+        #data = cap_matrix[:, :, f].T
         data = autoconstrast(data) #normalize the image
+        #data = median_filter(data, filter_kernel) #filter the image
         im.set_data(data) #update the resistance data
         im.set_extent([time_array[0], time_array[-1], 0, data.shape[0]])
         im.axes.set_xlim(time_array[0], time_array[-1])
@@ -286,15 +291,22 @@ if __name__ == '__main__':
                     resistance_full.append(res) #append the resistances
                     time_frame = frame["avg_timestamp"] #avg. timestamp of the last 3 readings
                     time_history.append(time_frame) #append only the timestamp of the last mode
+
+                    #mask the arrays to window the signals on time
+                    human_timestamp = [datetime.datetime.fromtimestamp(ts / 1e3) for ts in time_history] #list of the timestamps in human timestamp
+                    human_timestamp = np.array(human_timestamp) #convert to array for better masking
+                    time_mask = human_timestamp >= human_timestamp[-1] - datetime.timedelta(hours=last_n_hours) #timestamp mask (last "n" hours)
+
+                    #TODO: optimize the masking
+                    time_history = np.array(time_history)[time_mask] #mask the timestamps
+                    time_history = list(time_history)
+                    capacitance_full = np.array(capacitance_full)[time_mask, :, :] #mask the total capacitance matrix
+                    capacitance_full = list(capacitance_full) #convert to list
+                    resistance_full = np.array(resistance_full)[time_mask, :, :] #mask to the total resistance matrix
+                    resistance_full = list(resistance_full) #convert to list
                     cap_matrix = np.stack(capacitance_full, axis=0) #stack the values
                     res_matrix = np.stack(resistance_full, axis=0) #stack the values
 
-                    #mask the arrays for the last "WINDOW" hour
-                    human_timestamp = [datetime.datetime.fromtimestamp(ts / 1e3) for ts in time_history] #list of the timestamps in human timestamp
-                    human_timestamp = np.array(human_timestamp) #convert to array to better masking
-                    timestamp_mask = human_timestamp >= human_timestamp[-1] - datetime.timedelta(hours=hours_mask) #timestamp mask
-                    cap_matrix = cap_matrix[timestamp_mask, :, :] #mask the capacitance array
-                    res_matrix = res_matrix[timestamp_mask, :, :] #mask the resistance array
                     update_plot(cap_matrix, res_matrix, cap_ims, res_ims, human_timestamp, fig) #update images with the newly stacked matrices
                     #print(f'[{time.time() - t_last_frame} s] Updated frame = {np.shape(cap_matrix)}')
                     img_counter = 0 #reset the counter
