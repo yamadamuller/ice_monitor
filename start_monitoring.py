@@ -9,8 +9,6 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import os
 import datetime
-import pandas as pd
-import csv
 import numpy as np
 from matplotlib.ticker import MaxNLocator
 
@@ -20,9 +18,10 @@ output_path = 'C:/Users/Everton/Desktop/PHOBOS_sw_test_Data/testtest'#        |
 filename = f'test_realtime.csv' #file that stores the readings                |
 final_path = os.path.join(output_path, filename) #file that stores readings   |
 n_modes = 10  #number of acquisition pairs                                    |
-n_mean = 1  #every 3 samples compute the mean                                 |
-cap_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #frequencies                  |
-res_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #frequencies                  |
+n_mean = 1  #every n samples compute the mean                                 |
+cap_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #sweeped frequencies          |
+res_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #sweeped frequencies          |
+last_n_hours = 1 #threshold to mask timestamps on plot                        |
 #------------------------------------------------------------------------------
 
 # buffers in memory
@@ -70,7 +69,7 @@ def producer_main(buffer:multiprocessing.Queue):
 
             if not line:
                 file.seek(where)
-                time.sleep(1e-3)
+                time.sleep(1)
                 continue
 
             #process the line
@@ -117,15 +116,14 @@ def consumer_main(plot_buffer:multiprocessing.Queue, buffer:multiprocessing.Queu
             except:
                 continue #if something fails during the registering
         else:
-            time.sleep(1e-3)
+            time.sleep(1)
 
 def init_plot(mode_order:list[str]):
     global cap_freqs, res_freqs
 
     #monitored frequencies
     plt.ion()
-    fig, axes = plt.subplots(2, len(cap_freqs), figsize=(10,5))
-    print(axes)
+    fig, axes = plt.subplots(2, len(cap_freqs), figsize=(8,6))
     cap_ims = []
     res_ims = []
 
@@ -177,42 +175,32 @@ def init_plot(mode_order:list[str]):
     plt.show()
     return fig, axes, cap_ims, res_ims
 
-def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_ims:list, timehistory:list):
-    x = [datetime.datetime.fromtimestamp(ts/1e3) for ts in timehistory] #list of the timestamps in human timestamp
-
+def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_ims:list, time_array:np.ndarray, fig:plt.Figure):
     #generate the images for capacitance
     for f, im in enumerate(cap_ims):
         data = cap_matrix[:, :, f].T #transpose the array to have modes on the Y-axis
         data = autoconstrast(data) #normalize the image
         im.set_data(data) #update the capacitance data
-        im.set_extent([x[0], x[-1], 0, data.shape[0]]) #map x-axis to timestamps
-        im.axes.set_xlim(x[0], x[-1])
+        im.set_extent([time_array[0], time_array[-1], 0, data.shape[0]]) #map x-axis to timestamps
+        im.axes.set_xlim(time_array[0], time_array[-1])
         im.set_clim(0, 1)
         ax = im.axes
-        ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
+        ax.xaxis.set_major_locator(MaxNLocator(nbins=2))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-        #fig = cap_ims[f].axes.figure
-        #fig.canvas.draw()
-        #fig.canvas.flush_events()
 
     for f, im in enumerate(res_ims):
         data = res_matrix[:, :, f].T #transpose the array to have modes on the Y-axis
         data = autoconstrast(data) #normalize the image
-        im.set_data(data+1e-8) #update the resistance data
-        im.set_extent([x[0], x[-1], 0, data.shape[0]])
-        im.axes.set_xlim(x[0], x[-1])
+        im.set_data(data) #update the resistance data
+        im.set_extent([time_array[0], time_array[-1], 0, data.shape[0]])
+        im.axes.set_xlim(time_array[0], time_array[-1])
         im.set_clim(0, 1)
         ax = im.axes
-        ax.xaxis.set_major_locator(MaxNLocator(nbins=3))
+        ax.xaxis.set_major_locator(MaxNLocator(nbins=2))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-        #fig = res_ims[f].axes.figure
-        #fig.canvas.draw()
-        #fig.canvas.flush_events()
 
-    fig = cap_ims[0].axes.figure
-    fig.canvas.draw()
+    fig.canvas.draw_idle()
     fig.canvas.flush_events()
-    plt.pause(0.01) #plotly refresh
 
 #launch the three processes
 if __name__ == '__main__':
@@ -220,13 +208,13 @@ if __name__ == '__main__':
     while True:
         if os.path.isfile(final_path):
             break
-        time.sleep(1e-3) #busy wait
+        time.sleep(0.1) #busy wait
 
     print(f'[StartMonitoring] Monitoring CSV file @ {final_path}')
 
     #busy wait while target filepath doesn't exist
-    while not os.path.isfile(final_path):
-        time.sleep(1e-3)
+    #while not os.path.isfile(final_path):
+    #    time.sleep(0.1)
 
     producer_proc = Process(target=producer_main, args=(buffer,))
     producer_proc.start()
@@ -257,7 +245,16 @@ if __name__ == '__main__':
                     time_history.append(time_frame) #append only the timestamp of the last mode
                     cap_matrix = np.stack(capacitance_full, axis=0) #stack the values
                     res_matrix = np.stack(resistance_full, axis=0) #stack the values
-                    update_plot(cap_matrix, res_matrix, cap_ims, res_ims, time_history) #update images with the newly stacked matrices
+
+                    #mask the arrays to window the signals on time
+                    human_timestamp = [datetime.datetime.fromtimestamp(ts / 1e3) for ts in time_history] #list of the timestamps in human timestamp
+                    human_timestamp = np.array(human_timestamp) #convert to array for better masking
+                    time_mask = human_timestamp >= human_timestamp[-1] - datetime.timedelta(hours=last_n_hours) #timestamp mask (last "n" hours)
+                    cap_matrix = cap_matrix[time_mask, :, :] #mask the capacitance array
+                    res_matrix = res_matrix[time_mask, :, :] #mask the resistance array
+
+                    update_plot(cap_matrix, res_matrix, cap_ims, res_ims, human_timestamp[time_mask], fig) #update images with the newly stacked matrices
+                    #print(f'[{time.time() - t_last_frame} s] Updated frame', flush=True)
                     img_counter = 0 #reset the counter
                     cap = np.zeros((len(mode_index), 4)) #reset the batch-specific capacitance array
                     res = np.zeros((len(mode_index), 4)) #reset the batch-specific resistance array
