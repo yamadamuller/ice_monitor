@@ -14,14 +14,14 @@ from matplotlib.ticker import MaxNLocator
 
 #--- ACQUISITION CONFIGS ------------------------------------------------------
 #path to where the real acquisitions are stored                               |
-output_path = 'C:/Users/Everton/Desktop/PHOBOS_sw_test_Data/test7'#           |
+output_path = './testICE_24_11_25'#                                           |
 filename = f'c_test.csv' #file that stores the readings                       |
 final_path = os.path.join(output_path, filename) #file that stores readings   |
 n_modes = 10  #number of acquisition pairs                                    |
-n_mean = 1  #every n samples compute the mean                                 |
-cap_freqs = ["10kHz", "1MHz"] #sweeped frequencies                            |
-res_freqs = ["10kHz", "1MHz"] #sweeped frequencies                            |
-last_n_hours = 15 #threshold to mask timestamps on plot                        |
+n_mean = 3  #every n samples compute the mean                                 |
+cap_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #frequencies                  |
+res_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #frequencies                  |
+last_n_hours = 15 #threshold to mask timestamps on plot                       |
 #------------------------------------------------------------------------------
 
 # buffers in memory
@@ -135,7 +135,7 @@ def init_plot(mode_order:list[str]):
 
     #monitored frequencies
     plt.ion()
-    fig, axes = plt.subplots(2, len(cap_freqs), figsize=(4,3))
+    fig, axes = plt.subplots(2, len(cap_freqs), figsize=(6,6))
     cap_ims = []
     res_ims = []
 

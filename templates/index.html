@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Ice monitor</title>
+        <link rel="icon" type="image/x-icon" href="https://nuem.ct.utfpr.edu.br/wp-content/uploads/2021/05/favicon.ico">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Text:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+            body {
+                font-family: 'Red Hat Text', sans-serif;
+                text-align: justify;
+                text-justify: inter-word;
+                margin: 0;
+                padding: 0;
+                position: relative;
+                min-height: 100vh;
+            }
+
+            .highlight-color{
+                color: #4A88C3;
+            }
+
+            .content {
+                max-width: 1000px;
+                margin: 0px auto 0px;
+                padding: 0 0px;
+                line-height: 1.6;
+                font-size: 1.1rem;
+                color: #333;
+            }
+
+            .fixed{
+                position: fixed;
+            }
+
+            .top-0{
+                top: 0;
+            }
+
+            .left-0{
+                left: 0;
+            }
+
+            .right-0{
+                right: 0;
+            }
+
+            .transition-all {
+                transition-property: all;
+                transition-timing-function: cubic-bezier(.4,0,.2,1);
+                transition-duration: .15s;
+            }
+
+            .duration-300 {
+                animation-duration: .3s;
+            }
+
+            .py-5 {
+                padding-top: 1.25rem;
+                padding-bottom: 1.25rem;
+            }
+
+             .items-center {
+                align-items: center;
+            }
+
+            .img-responsive {
+                max-width: 10%;
+            }
+        </style>
+    </head>
+
+    <body class="content" style="margin-left:500px;">
+<!--        <header class="fixed top-0 right-0 left-0 transition-all duration-300 py-5">-->
+<!--            <a class="flex items-center" href="/">-->
+<!--                <img src="https://nuem.ct.utfpr.edu.br/wp-content/uploads/2020/10/Marca-horizontal_texto-em-ingles.png"-->
+<!--                     alt="gelado_logo" width="15%" height="15%">-->
+<!--            </a>-->
+<!--        </header>-->
+
+        <div>
+            <h1 class="highlight-color">Ice monitor</h1>
+            <button id="startBtn" onclick="startAcquisition()">Start monitoring</button>
+            <button id="stopBtn"  onclick="stopAcquisition()" disabled>Stop monitoring</button>
+        </div>
+
+        <script>
+            async function startAcquisition() {
+                const startBtn = document.getElementById('startBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                startBtn.disabled = true;
+                startBtn.innerText = 'Start monitoring';
+
+                try {
+                    const response = await fetch('/monitor_start');
+                    const text = await response.text();
+                    console.log(text);
+                    startBtn.innerText = 'Start monitoring';
+                    stopBtn.disabled = false;
+                } catch (err) {
+                    console.error(err);
+                    startBtn.disabled = false;
+                    startBtn.innerText = 'Start monitoring';
+                }
+            }
+
+            async function stopAcquisition() {
+                const startBtn = document.getElementById('startBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                stopBtn.disabled = true;
+                stopBtn.innerText = 'Stop monitoring';
+
+                try {
+                    const response = await fetch('/monitor_stop');
+                    const text = await response.text();
+                    console.log(text);
+                    startBtn.disabled = false;
+                    startBtn.innerText = 'Start monitoring';
+                    stopBtn.innerText = 'Stop monitoring';
+                } catch (err) {
+                    console.error(err);
+                }
+            }
+
+            window.onload = async function() {
+                const startBtn = document.getElementById('startBtn');
+                const stopBtn = document.getElementById('stopBtn');
+
+                try {
+                    const response = await fetch('/acq_status');
+                    const data = await response.json();
+
+                    if (data.running) {
+                        startBtn.disabled = true;
+                        startBtn.innerText = 'Start monitoring';
+                        stopBtn.disabled = false;
+                    } else {
+                        startBtn.disabled = false;
+                        startBtn.innerText = 'Start monitoring';
+                        stopBtn.disabled = true;
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch status:', err);
+                }
+            };
+        </script>
+    </body>
+</html>
