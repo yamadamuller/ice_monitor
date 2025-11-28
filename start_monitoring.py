@@ -14,14 +14,14 @@ from matplotlib.ticker import MaxNLocator
 
 #--- ACQUISITION CONFIGS ------------------------------------------------------
 #path to where the real acquisitions are stored                               |
-output_path = 'C:/Users/Everton/Desktop/PHOBOS_sw_test_Data/test1'#        |
-filename = f'c_test.csv' #file that stores the readings                |
+output_path = 'C:/Users/Everton/Desktop/PHOBOS_sw_test_Data/test7'#           |
+filename = f'c_test.csv' #file that stores the readings                       |
 final_path = os.path.join(output_path, filename) #file that stores readings   |
 n_modes = 10  #number of acquisition pairs                                    |
-n_mean = 3  #every n samples compute the mean                                 |
-cap_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #sweeped frequencies          |
-res_freqs = ["1kHz", "10kHz", "100kHz", "1MHz"] #sweeped frequencies          |
-last_n_hours = 1 #threshold to mask timestamps on plot                        |
+n_mean = 1  #every n samples compute the mean                                 |
+cap_freqs = ["10kHz", "1MHz"] #sweeped frequencies                            |
+res_freqs = ["10kHz", "1MHz"] #sweeped frequencies                            |
+last_n_hours = 15 #threshold to mask timestamps on plot                        |
 #------------------------------------------------------------------------------
 
 # buffers in memory
@@ -69,7 +69,7 @@ def producer_main(buffer:multiprocessing.Queue):
 
             if not line:
                 file.seek(where)
-                time.sleep(1)
+                time.sleep(1e-3)
                 continue
 
             #process the line
@@ -98,14 +98,26 @@ def consumer_main(plot_buffer:multiprocessing.Queue, buffer:multiprocessing.Queu
                         batch[electrode_mode]["cap"] = np.vstack([batch[electrode_mode]["cap"], cap_readings]) #append the capacitance to the mode dictionary
                         batch[electrode_mode]["res"] = np.vstack([batch[electrode_mode]["res"], res_readings]) #append the resistance to the mode dictionary
                     else:
-                        plot_buffer.put(
+                        if n_mean > 1:
+                            plot_buffer.put(
+                                    {
+                                        "mode": electrode_mode, #which mode
+                                        "avg_timestamp": np.mean(batch[electrode_mode]["timestamp"], axis=0), #mean of the timestamps
+                                        "avg_cap": np.mean(batch[electrode_mode]["cap"], axis=0), #mean of the capacitance
+                                        "avg_res": np.mean(batch[electrode_mode]["res"], axis=0) #mean of the resistance
+                                    }
+                            ) #if n_mean samples have been appended -> push to the plot buffer
+
+                        else:
+                            plot_buffer.put(
                                 {
-                                    "mode": electrode_mode, #which mode
-                                    "avg_timestamp": np.mean(batch[electrode_mode]["timestamp"], axis=0), #mean of the timestamps
-                                    "avg_cap": np.mean(batch[electrode_mode]["cap"], axis=0), #mean of the capacitance
-                                    "avg_res": np.mean(batch[electrode_mode]["res"], axis=0) #mean of the resistance
+                                    "mode": electrode_mode,  # which mode
+                                    "avg_timestamp": np.mean(batch[electrode_mode]["timestamp"], axis=0),
+                                    "avg_cap": batch[electrode_mode]["cap"],  # mean of the capacitance
+                                    "avg_res": batch[electrode_mode]["res"]  # mean of the resistance
                                 }
-                        ) #if n_mean samples have been appended -> push to the plot buffer
+                            ) #if n_mean samples have been appended -> push to the plot buffer
+
                         del batch[electrode_mode] #reset the batch after mean
                 else:
                     batch[electrode_mode] = {
@@ -116,14 +128,14 @@ def consumer_main(plot_buffer:multiprocessing.Queue, buffer:multiprocessing.Queu
             except:
                 continue #if something fails during the registering
         else:
-            time.sleep(1)
+            time.sleep(1e-3)
 
 def init_plot(mode_order:list[str]):
     global cap_freqs, res_freqs
 
     #monitored frequencies
     plt.ion()
-    fig, axes = plt.subplots(2, len(cap_freqs), figsize=(8,6))
+    fig, axes = plt.subplots(2, len(cap_freqs), figsize=(4,3))
     cap_ims = []
     res_ims = []
 
@@ -219,9 +231,8 @@ if __name__ == '__main__':
 
     fig, axes, cap_ims, res_ims = init_plot(mode_order) #create the image object that will be overwritten every new sample
     img_counter = 0 #counter to monitor batches
-    cap = np.zeros((len(mode_index), 4)) #batch-specific capacitance array
-    res = np.zeros((len(mode_index), 4)) #batch-specific resistance array
-    #t_last_frame = time.time() #variable to monitor the time it takes to generate a new frame
+    cap = np.zeros((len(mode_index), len(cap_freqs))) #batch-specific capacitance array
+    res = np.zeros((len(mode_index), len(res_freqs))) #batch-specific resistance array
     while not stop_recording:
         if not plots.empty():
             try:
@@ -258,9 +269,8 @@ if __name__ == '__main__':
                     #update the plot
                     update_plot(cap_matrix, res_matrix, cap_ims, res_ims, human_timestamp, fig) #update images with the newly stacked matrices
                     img_counter = 0 #reset the counter
-                    cap = np.zeros((len(mode_index), 4)) #reset the batch-specific capacitance array
-                    res = np.zeros((len(mode_index), 4)) #reset the batch-specific resistance array
-                    #t_last_frame = time.time() #update the last frame counter
+                    cap = np.zeros((len(mode_index), len(cap_freqs))) #reset the batch-specific capacitance array
+                    res = np.zeros((len(mode_index), len(res_freqs))) #reset the batch-specific resistance array
             except:
                 continue #in case something goes wrong in the processing
         else:
