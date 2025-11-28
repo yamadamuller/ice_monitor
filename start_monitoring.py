@@ -87,7 +87,6 @@ def writter_main():
             writer.writerow(row)
             file.flush()
             os.fsync(file.fileno())
-            time.sleep(0.32)
             data_idx += 1  # increase the times
 
             if data_idx == len(data):
@@ -134,14 +133,26 @@ def consumer_main(plot_buffer:multiprocessing.Queue, buffer:multiprocessing.Queu
                         batch[electrode_mode]["cap"] = np.vstack([batch[electrode_mode]["cap"], cap_readings]) #append the capacitance to the mode dictionary
                         batch[electrode_mode]["res"] = np.vstack([batch[electrode_mode]["res"], res_readings]) #append the resistance to the mode dictionary
                     else:
-                        plot_buffer.put(
+                        if n_mean > 1:
+                            plot_buffer.put(
                                 {
-                                    "mode": electrode_mode, #which mode
-                                    "avg_timestamp": np.mean(batch[electrode_mode]["timestamp"], axis=0), #mean of the timestamps
-                                    "avg_cap": np.mean(batch[electrode_mode]["cap"], axis=0), #mean of the capacitance
-                                    "avg_res": np.mean(batch[electrode_mode]["res"], axis=0) #mean of the resistance
+                                    "mode": electrode_mode,  # which mode
+                                    "avg_timestamp": np.mean(batch[electrode_mode]["timestamp"], axis=0),
+                                    "avg_cap": np.mean(batch[electrode_mode]["cap"], axis=0),  # mean of the capacitance
+                                    "avg_res": np.mean(batch[electrode_mode]["res"], axis=0)  # mean of the resistance
                                 }
-                        ) #if n_mean samples have been appended -> push to the plot buffer
+
+                            )  # if n_mean samples have been appended -> push to the plot buffer
+                        else:
+                            plot_buffer.put(
+                                {
+                                    "mode": electrode_mode,  # which mode
+                                    "avg_timestamp": np.mean(batch[electrode_mode]["timestamp"]),
+                                    "avg_cap": batch[electrode_mode]["cap"],  # mean of the capacitance
+                                    "avg_res": batch[electrode_mode]["res"]  # mean of the resistance
+                                }
+                            )  # if n_mean samples have been appended -> push to the plot buffer
+
                         del batch[electrode_mode] #reset the batch after mean
                 else:
                     batch[electrode_mode] = {
@@ -186,7 +197,7 @@ def init_plot(mode_order:list[str]):
         ax = axes[1, f]
         im = ax.imshow(np.zeros((len(mode_order), 1)),
                        aspect='auto', cmap='jet')
-        ax.set_title(f"Cap. norm. w/ median filter @ {res_freqs[f]}")
+        ax.set_title(f"Res. norm. @ {res_freqs[f]}")
         ax.set_xlabel("Time")
 
         #set y labels only for the first image
@@ -211,7 +222,6 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
     for f, im in enumerate(cap_ims):
         data = cap_matrix[:, :, f].T #transpose the array to have modes on the Y-axis
         data = autoconstrast(data) #normalize the image
-
         im.set_data(data) #update the capacitance data
         im.set_extent([time_array[0], time_array[-1], 0, data.shape[0]]) #map x-axis to timestamps
         im.axes.set_xlim(time_array[0], time_array[-1])
@@ -222,9 +232,7 @@ def update_plot(cap_matrix:np.ndarray, res_matrix:np.ndarray, cap_ims:list, res_
 
     for f, im in enumerate(res_ims):
         data = res_matrix[:, :, f].T #transpose the array to have modes on the Y-axis
-        #data = cap_matrix[:, :, f].T
         data = autoconstrast(data) #normalize the image
-        #data = median_filter(data, filter_kernel) #filter the image
         im.set_data(data) #update the resistance data
         im.set_extent([time_array[0], time_array[-1], 0, data.shape[0]])
         im.axes.set_xlim(time_array[0], time_array[-1])
@@ -306,9 +314,8 @@ if __name__ == '__main__':
                     resistance_full = list(resistance_full) #convert to list
                     cap_matrix = np.stack(capacitance_full, axis=0) #stack the values
                     res_matrix = np.stack(resistance_full, axis=0) #stack the values
-
-                    update_plot(cap_matrix, res_matrix, cap_ims, res_ims, human_timestamp, fig) #update images with the newly stacked matrices
                     #print(f'[{time.time() - t_last_frame} s] Updated frame = {np.shape(cap_matrix)}')
+                    update_plot(cap_matrix, res_matrix, cap_ims, res_ims, human_timestamp, fig) #update images with the newly stacked matrices
                     img_counter = 0 #reset the counter
                     cap = np.zeros((len(mode_index), len(cap_freqs))) #reset the batch-specific capacitance array
                     res = np.zeros((len(mode_index), len(res_freqs))) #reset the batch-specific resistance array
