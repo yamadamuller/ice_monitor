@@ -24,9 +24,9 @@
             }
 
             .content {
-                max-width: 1000px;
-                margin: 0px auto 0px;
-                padding: 0 0px;
+                max-width: 800px;
+                margin: 100px auto 40px;
+                padding: 0 20px;
                 line-height: 1.6;
                 font-size: 1.1rem;
                 color: #333;
@@ -45,7 +45,7 @@
             }
 
             .right-0{
-                right: 0;
+                right: 20;
             }
 
             .transition-all {
@@ -70,82 +70,74 @@
             .img-responsive {
                 max-width: 10%;
             }
+
+            .ico_enhanced {
+                width: 200%;
+                height: 200%;
+            }
+
+            .heatmap-grid {
+                display: grid;
+                gap: 20px; /* spacing between columns */
+            }
+
+            .column-block {
+                border: 2px solid #333; /* border around each column */
+                padding: 10px;           /* space inside the border */
+                border-radius: 5px;      /* optional: rounded corners */
+                background-color: #f9f9f9; /* optional: background for better contrast */
+            }
+
+            .column-title {
+                font-weight: bold;
+                text-align: center;
+                margin-bottom: 10px;
+            }
+
+            .heatmap-canvas {
+                display: block;
+                margin: 10px auto; /* spacing between canvases inside column */
+                border: 1px solid #ccc; /* optional: border for individual canvas */
+            }
+
         </style>
     </head>
 
     <body class="content" style="margin-left:500px;">
-<!--        <header class="fixed top-0 right-0 left-0 transition-all duration-300 py-5">-->
-<!--            <a class="flex items-center" href="/">-->
-<!--                <img src="https://nuem.ct.utfpr.edu.br/wp-content/uploads/2020/10/Marca-horizontal_texto-em-ingles.png"-->
-<!--                     alt="gelado_logo" width="15%" height="15%">-->
-<!--            </a>-->
-<!--        </header>-->
-
         <div>
+             <a class="flex items-center" href="/">
+                <img src="https://www.udiscovermusic.com/wp-content/uploads/2020/04/Ice-Cube-GettyImages-74305254.jpg"
+                     alt="cube_logo" width="35%" height="35%">
+            </a>
             <h1 class="highlight-color">Ice monitor</h1>
+            Monitored file: <pre style="display:inline">{{ filename }}</pre><br>
             <button id="startBtn" onclick="startAcquisition()">Start monitoring</button>
             <button id="stopBtn"  onclick="stopAcquisition()" disabled>Stop monitoring</button>
         </div>
 
-        <script>
-            async function startAcquisition() {
-                const startBtn = document.getElementById('startBtn');
-                const stopBtn = document.getElementById('stopBtn');
-                startBtn.disabled = true;
-                startBtn.innerText = 'Start monitoring';
+        <div id="plotsContainer"></div>
 
-                try {
-                    const response = await fetch('/monitor_start');
-                    const text = await response.text();
-                    console.log(text);
-                    startBtn.innerText = 'Start monitoring';
-                    stopBtn.disabled = false;
-                } catch (err) {
-                    console.error(err);
-                    startBtn.disabled = false;
-                    startBtn.innerText = 'Start monitoring';
-                }
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+
+        <script>
+            let stopUpdate = false;
+
+            async function startAcquisition() {
+                stopUpdate = false;
+                document.getElementById("startBtn").disabled = true;
+                document.getElementById("stopBtn").disabled = false;
+                await fetch("/monitor_start");
+                updatePlots();
             }
 
             async function stopAcquisition() {
-                const startBtn = document.getElementById('startBtn');
-                const stopBtn = document.getElementById('stopBtn');
-                stopBtn.disabled = true;
-                stopBtn.innerText = 'Stop monitoring';
-
-                try {
-                    const response = await fetch('/monitor_stop');
-                    const text = await response.text();
-                    console.log(text);
-                    startBtn.disabled = false;
-                    startBtn.innerText = 'Start monitoring';
-                    stopBtn.innerText = 'Stop monitoring';
-                } catch (err) {
-                    console.error(err);
-                }
+                stopUpdate = true;
+                document.getElementById("startBtn").disabled = false;
+                document.getElementById("stopBtn").disabled = true;
+                await fetch("/monitor_stop");
             }
 
-            window.onload = async function() {
-                const startBtn = document.getElementById('startBtn');
-                const stopBtn = document.getElementById('stopBtn');
-
-                try {
-                    const response = await fetch('/acq_status');
-                    const data = await response.json();
-
-                    if (data.running) {
-                        startBtn.disabled = true;
-                        startBtn.innerText = 'Start monitoring';
-                        stopBtn.disabled = false;
-                    } else {
-                        startBtn.disabled = false;
-                        startBtn.innerText = 'Start monitoring';
-                        stopBtn.disabled = true;
-                    }
-                } catch (err) {
-                    console.error('Failed to fetch status:', err);
-                }
-            };
         </script>
     </body>
 </html>

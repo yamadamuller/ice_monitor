@@ -1,13 +1,22 @@
 {
   "csv_file": {
-    "path": "./testICE_24_11_25",
+    "path": "./acquisition",
     "filename": "c_test.csv"
   },
 
   "visualization": {
     "n_modes": 10,
     "n_samples": 3,
-    "freqs": ["1kHz", "10kHz", "100kHz", "1MHz"],
-    "time_window": 15
+    "n_freqs": 4,
+    "freq_0": 3,
+    "freq_n": 6,
+    "time_window": 5
+  },
+
+  "flask_server": {
+    "host": "0.0.0.0",
+    "port": 8001,
+    "key": "iceicebaby",
+    "cache_type": "simple"
   }
 }
