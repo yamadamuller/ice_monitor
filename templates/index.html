@@ -81,10 +81,10 @@
                 font-weight: bold;
                 margin-bottom: 4px;
             }
+
             .freq-row {
                 display: flex;
-                flex-direction: row;  /* side-by-side frequency blocks */
-                gap: 20px;
+                gap: 40px;
                 justify-content: flex-start;
                 align-items: flex-start;
             }
@@ -97,8 +97,7 @@
             }
 
             .heatmap-canvas {
-                border: 1px solid #ccc;
-                margin-bottom: 4px;
+                margin-bottom: 10px;
             }
 
             .label {
@@ -116,16 +115,16 @@
         </style>
     </head>
 
-    <body class="content" style="margin-left:500px;">
+    <body class="content" style="margin-left:400px;">
         <div>
-             <a class="flex items-center" href="/">
+             <a class="flex items-center" target="_blank" href="https://www.youtube.com/watch?v=h4UqMyldS7Q&list=RDh4UqMyldS7Q&start_radio=1">
                 <img src="https://www.udiscovermusic.com/wp-content/uploads/2020/04/Ice-Cube-GettyImages-74305254.jpg"
                      alt="cube_logo" width="35%" height="35%">
             </a>
             <h1 class="highlight-color">Ice monitor</h1>
             <button id="startBtn" onclick="startAcquisition()">Start monitoring</button>
-            <button id="stopBtn"  onclick="stopAcquisition()" disabled>Stop monitoring</button>
-            <pre id="monitoredFile" class="highlight-color"></pre>
+            <button id="stopBtn"  onclick="stopAcquisition()" disabled>Stop monitoring</button><br>
+            <pre id="monitoredFile" style="display:inline" class="highlight-color"></pre><br>
         </div>
 
         <div id="heatmapContainer" class="freq-row"></div>
@@ -136,8 +135,8 @@
             let stopUpdate = false;
             let pollingInterval = null;
             let freqData = {};
-            const canvasWidth = 300;  // fixed canvas width
-            const canvasHeight = 200; // per heatmap
+            const canvasWidth = 300;
+            const canvasHeight = 200;
             const modeLabels = [
                 "d:10-1", "d:9-10", "d:8-9", "d:7-8", "d:6-7",
                 "d:5-6", "d:4-5", "d:3-4", "d:2-3", "d:1-2"
@@ -155,10 +154,10 @@
                     block.className = "column-block";
 
                     block.innerHTML = `
-                        <div class="canvas-title">Capacitance (${freq} Hz)</div>
+                        <div class="canvas-title">Cap. norm. @ ${freq} Hz</div>
                         <canvas id="cap_${freq}" width="${canvasWidth}" height="${canvasHeight}" class="heatmap-canvas"></canvas>
 
-                        <div class="canvas-title">Resistance (${freq} Hz)</div>
+                        <div class="canvas-title">Res. norm. @ ${freq} Hz</div>
                         <canvas id="res_${freq}" width="${canvasWidth}" height="${canvasHeight}" class="heatmap-canvas"></canvas>
 
                         <canvas id="ts_${freq}" width="${canvasWidth}" height="20" class="timestamp-canvas"></canvas>
@@ -170,7 +169,7 @@
             }
 
             function startPolling() {
-                pollingInterval = setInterval(fetchAllHeatmaps, 500);
+                pollingInterval = setInterval(fetchAllHeatmaps, 1000);
             }
 
             function stopPolling() {
@@ -192,8 +191,8 @@
                             ts: data.timestamp
                         };
 
-                        drawHeatmap(`cap_${freq}`, freqData[freq].cap);
-                        drawHeatmap(`res_${freq}`, freqData[freq].res);
+                        drawHeatmap(`cap_${freq}`, freqData[freq].cap, modeLabels);
+                        drawHeatmap(`res_${freq}`, freqData[freq].res, modeLabels);
                         drawTimestamps(`ts_${freq}`, freqData[freq].ts);
 
                     } catch (err) {
@@ -202,15 +201,15 @@
                 }
             }
 
-            function drawHeatmap(canvasId, matrix) {
+            function drawHeatmap(canvasId, matrix, modeLabels = []) {
                 const canvas = document.getElementById(canvasId);
                 if (!canvas || !matrix.length) return;
 
                 const ctx = canvas.getContext("2d");
-                const T = matrix.length;    // timestamps (horizontal)
-                const M = matrix[0].length; // modes (vertical)
-                console.log(T)
-                const leftMargin = 40;      // space for mode labels
+                const T = matrix.length;
+                const M = matrix[0].length;
+
+                const leftMargin = 40;
                 const heatmapWidth = canvas.width - leftMargin;
                 const heatmapHeight = canvas.height;
 
@@ -219,26 +218,26 @@
                 const pxPerCol = heatmapWidth / T;
                 const pxPerRow = heatmapHeight / M;
 
-                // Flatten matrix to normalize colors
-                const flat = matrix.flat();
-                const min = Math.min(...flat);
-                const max = Math.max(...flat);
+                function jetColor(x) {
+                    let r = Math.min(Math.max(1.5 - Math.abs(4 * x - 3), 0), 1);
+                    let g = Math.min(Math.max(1.5 - Math.abs(4 * x - 2), 0), 1);
+                    let b = Math.min(Math.max(1.5 - Math.abs(4 * x - 1), 0), 1);
+                    r = Math.floor(r * 255);
+                    g = Math.floor(g * 255);
+                    b = Math.floor(b * 255);
+                    return `rgb(${r},${g},${b})`;
+                }
 
-                // Draw heatmap with reversed y-axis
                 for (let t = 0; t < T; t++) {
                     for (let m = 0; m < M; m++) {
                         const v = matrix[t][m];
-                        const norm = (v - min) / (max - min + 1e-12);
-                        const color = Math.floor(norm * 255);
-                        ctx.fillStyle = `rgb(${color},0,${255 - color})`;
+                        ctx.fillStyle = jetColor(v);
 
-                        // Reverse y-axis: mode 0 -> bottom, mode 9 -> top
                         const y = (M - 1 - m) * pxPerRow;
                         ctx.fillRect(leftMargin + t * pxPerCol, y, pxPerCol, pxPerRow);
                     }
                 }
 
-                // Draw y-axis labels (reversed)
                 ctx.fillStyle = "#000";
                 ctx.font = "12px Arial";
                 ctx.textAlign = "right";
@@ -246,7 +245,7 @@
 
                 for (let m = 0; m < M; m++) {
                     const y = (M - 1 - m) * pxPerRow + pxPerRow / 2;
-                    const label = modeLabels[m] || `Mode ${m}`;
+                    const label = `${modeLabels[m]}`;
                     ctx.fillText(label, leftMargin - 5, y);
                 }
             }
@@ -259,43 +258,48 @@
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 ctx.fillStyle = "#000";
-                ctx.font = "10px Arial";
+                ctx.font = "8px Arial";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
 
-                const nLabels = 4; // number of timestamps to display
+                const nLabels = 3;
                 const step = Math.max(1, Math.floor(tsArray.length / (nLabels - 1)));
-                console.log(tsArray.length);
+                const padding = 20;
+                const usableWidth = canvas.width - padding * 2;
+
                 for (let i = 0; i < tsArray.length; i += step) {
                     const date = new Date(tsArray[i]);
                     const label = `${date.getHours()}:${String(date.getMinutes()).padStart(2,"0")}:${String(date.getSeconds()).padStart(2,"0")}`;
-                    const x = i * canvas.width / tsArray.length + canvas.width / tsArray.length / 2;
+                    const x = padding + (i / (tsArray.length - 1)) * usableWidth;
                     ctx.fillText(label, x, canvas.height / 2);
                 }
 
-                // Ensure the last timestamp is always displayed
                 const lastDate = new Date(tsArray[tsArray.length - 1]);
                 const lastLabel = `${lastDate.getHours()}:${String(lastDate.getMinutes()).padStart(2,"0")}:${String(lastDate.getSeconds()).padStart(2,"0")}`;
-                const lastX = canvas.width - canvas.width / tsArray.length / 2;
-                ctx.fillText(lastLabel, lastX, canvas.height / 2);
+                ctx.fillText(lastLabel, canvas.width - padding, canvas.height / 2);
             }
 
+
             async function startAcquisition() {
+                const fileCSV = "{{ filename }}";
+                const monitoredFile = document.getElementById("monitoredFile");
                 stopUpdate = false;
                 document.getElementById("startBtn").disabled = true;
                 document.getElementById("stopBtn").disabled = false;
+                monitoredFile.textContent = `Monitored file @ ${fileCSV}`;
                 await fetch("/monitor_start");
                 startPolling();
             }
 
             async function stopAcquisition() {
+                const monitoredFile = document.getElementById("monitoredFile");
                 stopUpdate = true;
                 document.getElementById("startBtn").disabled = false;
                 document.getElementById("stopBtn").disabled = true;
+                monitoredFile.textContent = '';
                 await fetch("/monitor_stop");
                 stopPolling();
             }
-
 
         </script>
     </body>

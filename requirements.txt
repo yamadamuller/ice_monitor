@@ -1,6 +1,0 @@
-Flask
-flask_caching
-flask_cors
-numpy
-pandas
-python-dotenv

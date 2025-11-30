@@ -10,7 +10,7 @@
     "n_freqs": 4,
     "freq_0": 3,
     "freq_n": 6,
-    "time_window": 1
+    "time_window": 10
   },
 
   "flask_server": {
