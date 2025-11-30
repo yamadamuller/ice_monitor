@@ -148,7 +148,6 @@ def consumer_main(plot_buffer:multiprocessing.Queue, buffer:multiprocessing.Queu
                             "res": res_readings,
                     } #if the mode hasn't been registered yet
             except:
-                time.sleep(1e-3)
                 continue #if something fails during the registering
         else:
             time.sleep(1e-3)
@@ -172,6 +171,7 @@ def index():
                            freqs=freqs.tolist())
 
 def frame_processing(plot_buffer:multiprocessing.Queue, buffer_event:multiprocessing.synchronize.Event):
+    print(f'[FrameProcessing] Launched API thread!')
     #plotting helpers
     capacitance_full = []
     resistance_full = []
@@ -226,14 +226,14 @@ def frame_processing(plot_buffer:multiprocessing.Queue, buffer_event:multiproces
                             "res_mtx": res_matrix[:,:,freq_indx].tolist(),
                             "timestamp": human_timestamp.tolist()
                         } #update frequency specific image api
-
+                    print(human_timestamp[-1])
                     img_counter = 0 #reset the counter
                     cap = np.zeros((n_modes, n_freqs)) #reset the batch-specific capacitance matrix
                     res = np.zeros((n_modes, n_freqs)) #reset the batch-specific resistance matrix
             except:
                 continue  #in case something goes wrong processing a frame/batch, continue to not freeze the image
         else:
-            time.sleep(1e-3)  #empty buffer
+            continue
 
 @app.route('/monitor_start')
 @cross_origin()
@@ -245,7 +245,7 @@ def start_data_acquisition():
     ipc_runner.consumer_process.start()
     ipc_runner.api_thread = threading.Thread(target=frame_processing, args=(plots, visu_event,))
     ipc_runner.api_thread.start()
-    return "Monitoring CSV file for plotting"
+    return "[IceWebMonitor] Monitoring CSV file for plotting"
 
 @app.route('/monitor_stop')
 @cross_origin()
@@ -293,7 +293,7 @@ def stop_data_acquisition():
     plots = multiprocessing.Queue() #reset plot buffer
     visu_event = multiprocessing.Manager().Event() #reset event
 
-    return "Stopped monitoring CSV file for plotting"
+    return "[IceWebMonitor] Stopped monitoring CSV file for plotting"
 
 @app.route("/monitor_status")
 @cross_origin()
@@ -308,8 +308,11 @@ def monitor_status():
 @app.route("/api/<sweeped_freq>Hz")
 @cross_origin()
 def frequency_data_api(sweeped_freq):
-    if last_proc_image[sweeped_freq]:
-        return jsonify(last_proc_image[sweeped_freq])
+    try:
+        if last_proc_image[sweeped_freq]:
+            return jsonify(last_proc_image[sweeped_freq])
+    except:
+        pass
 
 if __name__ == '__main__':
     # buffers in memory
@@ -325,7 +328,7 @@ if __name__ == '__main__':
             break
     time.sleep(0.1) #busy wait until accessible
 
-    print(f'[StartMonitoring] Monitoring CSV file @ {csv_file}')
-   
+    print(f'[IceWebMonitor] Monitoring CSV file @ {csv_file}')
+
     #run the web server on port "UI_SERVER_PORT"
     app.run(host=configs["flask_server"]["host"], port=configs["flask_server"]["port"], debug=True)

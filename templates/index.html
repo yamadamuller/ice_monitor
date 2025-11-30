@@ -76,29 +76,42 @@
                 height: 200%;
             }
 
-            .heatmap-grid {
-                display: grid;
-                gap: 20px; /* spacing between columns */
+            .canvas-title {
+                text-align: center;
+                font-weight: bold;
+                margin-bottom: 4px;
+            }
+            .freq-row {
+                display: flex;
+                flex-direction: row;  /* side-by-side frequency blocks */
+                gap: 20px;
+                justify-content: flex-start;
+                align-items: flex-start;
             }
 
             .column-block {
-                border: 2px solid #333; /* border around each column */
-                padding: 10px;           /* space inside the border */
-                border-radius: 5px;      /* optional: rounded corners */
-                background-color: #f9f9f9; /* optional: background for better contrast */
-            }
-
-            .column-title {
-                font-weight: bold;
-                text-align: center;
-                margin-bottom: 10px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                min-width: 300px;
             }
 
             .heatmap-canvas {
-                display: block;
-                margin: 10px auto; /* spacing between canvases inside column */
-                border: 1px solid #ccc; /* optional: border for individual canvas */
+                border: 1px solid #ccc;
+                margin-bottom: 4px;
             }
+
+            .label {
+                text-align: center;
+                font-size: 0.9rem;
+                margin-bottom: 4px;
+            }
+
+            .timestamp-canvas {
+                border-top: 1px solid #000;
+                margin-top: 2px;
+            }
+
 
         </style>
     </head>
@@ -110,25 +123,37 @@
                      alt="cube_logo" width="35%" height="35%">
             </a>
             <h1 class="highlight-color">Ice monitor</h1>
-            Monitored file: <pre style="display:inline">{{ filename }}</pre><br>
             <button id="startBtn" onclick="startAcquisition()">Start monitoring</button>
             <button id="stopBtn"  onclick="stopAcquisition()" disabled>Stop monitoring</button>
+            <pre id="monitoredFile" class="highlight-color"></pre>
         </div>
 
-        <div id="plotsContainer"></div>
-
-        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+        <div id="heatmapContainer" class="freq-row"></div>
 
 
         <script>
+            const sweepedFreqs = {{ freqs | tojson }};
             let stopUpdate = false;
+            let pollingInterval = null;
+            let freqData = {};
+
+            function startPolling() {
+                pollingInterval = setInterval(fetchAllHeatmaps, 500);
+            }
+
+            function stopPolling() {
+                clearInterval(pollingInterval);
+            }
+
+
+
 
             async function startAcquisition() {
                 stopUpdate = false;
                 document.getElementById("startBtn").disabled = true;
                 document.getElementById("stopBtn").disabled = false;
                 await fetch("/monitor_start");
-                updatePlots();
+                //startPolling();
             }
 
             async function stopAcquisition() {
@@ -136,7 +161,9 @@
                 document.getElementById("startBtn").disabled = false;
                 document.getElementById("stopBtn").disabled = true;
                 await fetch("/monitor_stop");
+                //stopPolling();
             }
+
 
         </script>
     </body>
