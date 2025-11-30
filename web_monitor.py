@@ -226,7 +226,7 @@ def frame_processing(plot_buffer:multiprocessing.Queue, buffer_event:multiproces
                             "res_mtx": res_matrix[:,:,freq_indx].tolist(),
                             "timestamp": human_timestamp.tolist()
                         } #update frequency specific image api
-                    print(human_timestamp[-1])
+
                     img_counter = 0 #reset the counter
                     cap = np.zeros((n_modes, n_freqs)) #reset the batch-specific capacitance matrix
                     res = np.zeros((n_modes, n_freqs)) #reset the batch-specific resistance matrix
